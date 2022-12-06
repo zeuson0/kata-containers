@@ -14,10 +14,11 @@ use std::sync::Arc;
 use anyhow::{anyhow, ensure, Result};
 use async_trait::async_trait;
 use protocols::image;
+use rustjail::container::BaseContainer;
 use tokio::sync::Mutex;
 use ttrpc::{self, error::get_rpc_status as ttrpc_error};
 
-use crate::rpc::{verify_cid, CONTAINER_BASE};
+use crate::rpc::{verify_cid, ANNO_K8S_IMAGE_NAME, CONTAINER_BASE};
 use crate::sandbox::Sandbox;
 use crate::AGENT_CONFIG;
 
@@ -176,7 +177,7 @@ impl ImageService {
 
     // If we fail to start the AA, Skopeo/ocicrypt won't be able to unwrap keys
     // and container decryption will fail.
-    fn init_attestation_agent() -> Result<()> {
+    async fn init_attestation_agent() -> Result<()> {
         let config_path = OCICRYPT_CONFIG_PATH;
 
         // The image will need to be encrypted using a keyprovider
@@ -188,7 +189,7 @@ impl ImageService {
                 }
             }
         });
-
+        let config = AGENT_CONFIG.read().await;
         let mut config_file = fs::File::create(config_path)?;
         config_file.write_all(ocicrypt_config.to_string().as_bytes())?;
 
@@ -198,6 +199,8 @@ impl ImageService {
             .arg(AA_KEYPROVIDER_PORT)
             .arg("--getresource_sock")
             .arg(AA_GETRESOURCE_PORT)
+            .arg("--agent_address")
+            .arg(&config.server_addr)
             .spawn()?;
         Ok(())
     }
@@ -253,7 +256,7 @@ impl ImageService {
                 Ordering::SeqCst,
                 Ordering::SeqCst,
             ) {
-                Ok(_) => Self::init_attestation_agent()?,
+                Ok(_) => Self::init_attestation_agent().await?,
                 Err(_) => info!(sl!(), "Attestation Agent already running"),
             }
         }
@@ -315,6 +318,42 @@ impl protocols::image_ttrpc_async::Image for ImageService {
                 return Err(ttrpc_error(ttrpc::Code::INTERNAL, e.to_string()));
             }
         }
+    }
+
+    async fn meta_container(
+        &self,
+        _ctx: &ttrpc::r#async::TtrpcContext,
+        req: image::MetaContainerRequest,
+    ) -> ttrpc::Result<image::MetaContainerResponse> {
+        let sandbox = self.sandbox.clone();
+        let mut s = sandbox.lock().await;
+
+        let ctr = s.get_container(req.get_container_id()).ok_or_else(|| {
+            ttrpc_error(
+                ttrpc::Code::INVALID_ARGUMENT,
+                "invalid container id".to_string(),
+            )
+        })?;
+
+        let image_client = self.image_client.clone();
+        let i = image_client.lock().await;
+
+        let meta_store = i.meta_store.clone();
+        let _m = meta_store.lock().await;
+
+        let _image_name = ctr
+            .config()
+            .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?
+            .spec
+            .as_ref()
+            .ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, ""))?
+            .annotations
+            .get(&ANNO_K8S_IMAGE_NAME.to_string())
+            .ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, ""))?;
+
+        let mut res = image::MetaContainerResponse::new();
+        res.digest = "123456".to_string();
+        Ok(res)
     }
 }
 

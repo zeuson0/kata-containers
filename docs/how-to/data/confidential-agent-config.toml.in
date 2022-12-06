@@ -41,5 +41,6 @@ allowed = [
 "UpdateRoutesRequest",
 "VolumeStatsRequest",
 "WaitProcessRequest",
-"WriteStreamRequest"
+"WriteStreamRequest",
+"MetaContainerRequest"
 ]

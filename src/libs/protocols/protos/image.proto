@@ -13,6 +13,7 @@ package grpc;
 service Image {
     // PullImage pulls an image with authentication config.
     rpc PullImage(PullImageRequest) returns (PullImageResponse) {}
+    rpc MetaContainer(MetaContainerRequest) returns (MetaContainerResponse) {}
 }
 
 message PullImageRequest {
@@ -28,4 +29,12 @@ message PullImageResponse {
     // Reference to the image in use. For most runtimes, this should be an
     // image ID or digest.
     string image_ref = 1;
+}
+
+message MetaContainerRequest {
+	string container_id = 1;
+}
+
+message MetaContainerResponse {
+	string digest = 1;
 }

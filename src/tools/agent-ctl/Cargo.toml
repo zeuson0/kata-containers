@@ -12,7 +12,6 @@ license = "Apache-2.0"
 
 [dependencies]
 protocols = { path = "../../libs/protocols", features = ["with-serde"] }
-rustjail = { path = "../../agent/rustjail" }
 oci = { path = "../../libs/oci" }
 
 clap = "2.33.0"

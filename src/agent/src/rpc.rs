@@ -87,7 +87,7 @@ use std::path::PathBuf;
 
 pub const CONTAINER_BASE: &str = "/run/kata-containers";
 const MODPROBE_PATH: &str = "/sbin/modprobe";
-const ANNO_K8S_IMAGE_NAME: &str = "io.kubernetes.cri.image-name";
+pub const ANNO_K8S_IMAGE_NAME: &str = "io.kubernetes.cri.image-name";
 const CONFIG_JSON: &str = "config.json";
 const INIT_TRUSTED_STORAGE: &str = "/usr/bin/kata-init-trusted-storage";
 const TRUSTED_STORAGE_DEVICE: &str = "/dev/trusted_store";
