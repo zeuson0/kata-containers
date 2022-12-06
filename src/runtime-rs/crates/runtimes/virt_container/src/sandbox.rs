@@ -6,7 +6,9 @@
 
 use std::sync::Arc;
 
-use agent::{self, kata::KataAgent, types::KernelModule, Agent};
+use agent::{
+    self, kata::KataAgent, types::KernelModule, Agent, GetIPTablesRequest, SetIPTablesRequest,
+};
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use common::{
@@ -26,8 +28,10 @@ use resource::{
 };
 use tokio::sync::{mpsc::Sender, Mutex, RwLock};
 
-use crate::{health_check::HealthCheck, sandbox_persist::SandboxTYPE};
+use crate::health_check::HealthCheck;
 use persist::{self, sandbox_persist::Persist};
+
+pub(crate) const VIRTCONTAINER: &str = "virt_container";
 pub struct SandboxRestoreArgs {
     pub sid: String,
     pub toml_config: TomlConfig,
@@ -269,6 +273,28 @@ impl Sandbox for VirtSandbox {
     async fn agent_sock(&self) -> Result<String> {
         self.agent.agent_sock().await
     }
+
+    async fn set_iptables(&self, is_ipv6: bool, data: Vec<u8>) -> Result<Vec<u8>> {
+        info!(sl!(), "sb: set_iptables invoked");
+        let req = SetIPTablesRequest { is_ipv6, data };
+        let resp = self
+            .agent
+            .set_ip_tables(req)
+            .await
+            .context("sandbox: failed to set iptables")?;
+        Ok(resp.data)
+    }
+
+    async fn get_iptables(&self, is_ipv6: bool) -> Result<Vec<u8>> {
+        info!(sl!(), "sb: get_iptables invoked");
+        let req = GetIPTablesRequest { is_ipv6 };
+        let resp = self
+            .agent
+            .get_ip_tables(req)
+            .await
+            .context("sandbox: failed to get iptables")?;
+        Ok(resp.data)
+    }
 }
 
 #[async_trait]
@@ -279,7 +305,7 @@ impl Persist for VirtSandbox {
     /// Save a state of Sandbox
     async fn save(&self) -> Result<Self::State> {
         let sandbox_state = crate::sandbox_persist::SandboxState {
-            sandbox_type: SandboxTYPE::VIRTCONTAINER,
+            sandbox_type: VIRTCONTAINER.to_string(),
             resource: Some(self.resource_manager.save().await?),
             hypervisor: Some(self.hypervisor.save_state().await?),
         };

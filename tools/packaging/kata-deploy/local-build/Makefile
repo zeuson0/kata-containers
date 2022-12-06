@@ -24,6 +24,7 @@ all-parallel: $(MK_DIR)/dockerbuild/install_yq.sh
 all: serial-targets \
 	firecracker-tarball \
 	kernel-tarball \
+	nydus-tarball \
 	qemu-tarball \
 	shim-v2-tarball \
 	virtiofsd-tarball
@@ -49,6 +50,8 @@ kernel-tarball:
 kernel-experimental-tarball:
 	${MAKE} $@-build
 
+nydus-tarball:
+	${MAKE} $@-build
 
 qemu-tarball:
 	${MAKE} $@-build
@@ -116,9 +119,6 @@ cc-shim-v2-tarball:
 	${MAKE} $@-build
 
 cc-virtiofsd-tarball:
-	${MAKE} $@-build
-
-cc-tdx-cloud-hypervisor-tarball:
 	${MAKE} $@-build
 
 cc-tdx-kernel-tarball:

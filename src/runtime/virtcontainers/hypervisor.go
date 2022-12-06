@@ -323,6 +323,7 @@ type HypervisorConfig struct {
 	Msize9p                        uint32
 	MemSlots                       uint32
 	VirtioFSCacheSize              uint32
+	VirtioFSQueueSize              uint32
 	Uid                            uint32
 	Gid                            uint32
 	SEVGuestPolicy                 uint32
@@ -356,6 +357,7 @@ type HypervisorConfig struct {
 	DisableSeccomp                 bool
 	DisableSeLinux                 bool
 	LegacySerial                   bool
+	EnableVCPUsPinning             bool
 }
 
 // vcpu mapping from vcpu number to thread number

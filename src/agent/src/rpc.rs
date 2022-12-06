@@ -172,11 +172,16 @@ fn merge_oci_process(target: &mut oci::Process, source: &oci::Process) {
         target.args.append(&mut source.args.clone());
     }
 
-    if target.cwd.is_empty() && !source.cwd.is_empty() {
+    if target.cwd == "/" && source.cwd != "/" {
         target.cwd = String::from(&source.cwd);
     }
 
-    target.env.append(&mut source.env.clone());
+    for source_env in &source.env {
+        let variable_name: Vec<&str> = source_env.split('=').collect();
+        if !target.env.iter().any(|i| i.contains(variable_name[0])) {
+            target.env.push(source_env.to_string());
+        }
+    }
 }
 
 impl AgentService {
@@ -2197,6 +2202,11 @@ mod tests {
     use tempfile::{tempdir, TempDir};
     use test_utils::{assert_result, skip_if_not_root};
     use ttrpc::{r#async::TtrpcContext, MessageHeader};
+    use which::which;
+
+    fn check_command(cmd: &str) -> bool {
+        which(cmd).is_ok()
+    }
 
     fn mk_ttrpc_context() -> TtrpcContext {
         TtrpcContext {
@@ -2916,6 +2926,18 @@ OtherField:other
     async fn test_ip_tables() {
         skip_if_not_root!();
 
+        if !check_command(IPTABLES_SAVE)
+            || !check_command(IPTABLES_RESTORE)
+            || !check_command(IP6TABLES_SAVE)
+            || !check_command(IP6TABLES_RESTORE)
+        {
+            warn!(
+                sl!(),
+                "one or more commands for ip tables test are missing, skip it"
+            );
+            return;
+        }
+
         let logger = slog::Logger::root(slog::Discard, o!());
         let sandbox = Sandbox::new(&logger).unwrap();
         let agent_service = Box::new(AgentService {
@@ -3068,5 +3090,136 @@ COMMIT
                 .contains("INPUT -s 2001:db8:100::1/128 -i sit+ -p tcp -m tcp --sport 512:65535"),
             "We should see the resulting rule"
         );
+    }
+
+    #[tokio::test]
+    async fn test_merge_cwd() {
+        #[derive(Debug)]
+        struct TestData<'a> {
+            container_process_cwd: &'a str,
+            image_process_cwd: &'a str,
+            expected: &'a str,
+        }
+
+        let tests = &[
+            // Image cwd should override blank container cwd
+            // TODO - how can we tell the user didn't specifically set it to `/` vs not setting at all? Is that scenario valid?
+            TestData {
+                container_process_cwd: "/",
+                image_process_cwd: "/imageDir",
+                expected: "/imageDir",
+            },
+            // Container cwd should override image cwd
+            TestData {
+                container_process_cwd: "/containerDir",
+                image_process_cwd: "/imageDir",
+                expected: "/containerDir",
+            },
+            // Container cwd should override blank image cwd
+            TestData {
+                container_process_cwd: "/containerDir",
+                image_process_cwd: "/",
+                expected: "/containerDir",
+            },
+        ];
+
+        for (i, d) in tests.iter().enumerate() {
+            let msg = format!("test[{}]: {:?}", i, d);
+
+            let mut container_process = oci::Process {
+                cwd: d.container_process_cwd.to_string(),
+                ..Default::default()
+            };
+
+            let image_process = oci::Process {
+                cwd: d.image_process_cwd.to_string(),
+                ..Default::default()
+            };
+
+            merge_oci_process(&mut container_process, &image_process);
+
+            assert_eq!(d.expected, container_process.cwd, "{}", msg);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_merge_env() {
+        #[derive(Debug)]
+        struct TestData {
+            container_process_env: Vec<String>,
+            image_process_env: Vec<String>,
+            expected: Vec<String>,
+        }
+
+        let tests = &[
+            // Test that the pods environment overrides the images
+            TestData {
+                container_process_env: vec!["ISPRODUCTION=true".to_string()],
+                image_process_env: vec!["ISPRODUCTION=false".to_string()],
+                expected: vec!["ISPRODUCTION=true".to_string()],
+            },
+            // Test that multiple environment variables can be overrided
+            TestData {
+                container_process_env: vec![
+                    "ISPRODUCTION=true".to_string(),
+                    "ISDEVELOPMENT=false".to_string(),
+                ],
+                image_process_env: vec![
+                    "ISPRODUCTION=false".to_string(),
+                    "ISDEVELOPMENT=true".to_string(),
+                ],
+                expected: vec![
+                    "ISPRODUCTION=true".to_string(),
+                    "ISDEVELOPMENT=false".to_string(),
+                ],
+            },
+            // Test that when none of the variables match do not override them
+            TestData {
+                container_process_env: vec!["ANOTHERENV=TEST".to_string()],
+                image_process_env: vec![
+                    "ISPRODUCTION=false".to_string(),
+                    "ISDEVELOPMENT=true".to_string(),
+                ],
+                expected: vec![
+                    "ANOTHERENV=TEST".to_string(),
+                    "ISPRODUCTION=false".to_string(),
+                    "ISDEVELOPMENT=true".to_string(),
+                ],
+            },
+            // Test a mix of both overriding and not
+            TestData {
+                container_process_env: vec![
+                    "ANOTHERENV=TEST".to_string(),
+                    "ISPRODUCTION=true".to_string(),
+                ],
+                image_process_env: vec![
+                    "ISPRODUCTION=false".to_string(),
+                    "ISDEVELOPMENT=true".to_string(),
+                ],
+                expected: vec![
+                    "ANOTHERENV=TEST".to_string(),
+                    "ISPRODUCTION=true".to_string(),
+                    "ISDEVELOPMENT=true".to_string(),
+                ],
+            },
+        ];
+
+        for (i, d) in tests.iter().enumerate() {
+            let msg = format!("test[{}]: {:?}", i, d);
+
+            let mut container_process = oci::Process {
+                env: d.container_process_env.clone(),
+                ..Default::default()
+            };
+
+            let image_process = oci::Process {
+                env: d.image_process_env.clone(),
+                ..Default::default()
+            };
+
+            merge_oci_process(&mut container_process, &image_process);
+
+            assert_eq!(d.expected, container_process.env, "{}", msg);
+        }
     }
 }

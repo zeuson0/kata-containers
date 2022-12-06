@@ -13,47 +13,80 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/../scripts/lib.sh"
 
 export KATA_BUILD_CC="${KATA_BUILD_CC:-}"
-export qemu_cc_tarball_name="kata-static-qemu-cc.tar.gz"
+export TEE="${TEE:-}"
+export FIRMWARE="${FIRMWARE:-}"
 
 cache_qemu_artifacts() {
-	source "${script_dir}/qemu/build-static-qemu-cc.sh"
+	local qemu_tarball_name="kata-static-cc-qemu.tar.xz"
 	local current_qemu_version=$(get_from_kata_deps "assets.hypervisor.qemu.version")
-	create_cache_asset "${qemu_cc_tarball_name}" "${current_qemu_version}"
+	if [ -n "${TEE}" ]; then
+		qemu_tarball_name="kata-static-cc-${TEE}-qemu.tar.xz"
+		[ "${TEE}" == "tdx" ] && current_qemu_version=$(get_from_kata_deps "assets.hypervisor.qemu.tdx.tag")
+	fi
 	local qemu_sha=$(calc_qemu_files_sha256sum)
-        echo "${current_qemu_version} ${qemu_sha}" > "latest"
+	local current_qemu_image="$(get_qemu_image_name)"
+
+	create_cache_asset "${qemu_tarball_name}" "${current_qemu_version}-${qemu_sha}" "${current_qemu_image}"
 }
 
 cache_clh_artifacts() {
-	local binary="cloud-hypervisor"
-	local binary_path="$(echo $script_dir | sed 's,/*[^/]\+/*$,,' | sed 's,/*[^/]\+/*$,,' | sed 's,/*[^/]\+/*$,,')"
-	echo "binary path $binary_path"
-	local current_cloud_hypervisor_version=$(get_from_kata_deps "assets.hypervisor.cloud_hypervisor.version")
-	local clh_binary_path="${binary_path}/tools/packaging/kata-deploy/local-build/build/cc-cloud-hypervisor/builddir/cloud-hypervisor"
-	if [ -f "${clh_binary_path}/cloud-hypervisor" ]; then
-		cp "${clh_binary_path}/${binary}" .
-	else
-		cloud_hypervisor_build_path="${binary_path}/cloud-hypervisor"
-		cp "${cloud_hypervisor_build_path}/${binary}" .
+	local clh_tarball_name="kata-static-cc-cloud-hypervisor.tar.xz"
+	local current_clh_version=$(get_from_kata_deps "assets.hypervisor.cloud_hypervisor.version")
+	create_cache_asset "${clh_tarball_name}" "${current_clh_version}" ""
+}
+
+cache_kernel_artifacts() {
+	local kernel_tarball_name="kata-static-cc-kernel.tar.xz"
+	local current_kernel_image="$(get_kernel_image_name)"
+	local current_kernel_version="$(get_from_kata_deps "assets.kernel.version")"
+	if [ -n "${TEE}" ]; then
+		kernel_tarball_name="kata-static-cc-${TEE}-kernel.tar.xz"
+		[ "${TEE}" == "tdx" ] && current_kernel_version="$(get_from_kata_deps "assets.kernel.${TEE}.tag")"
+		[ "${TEE}" == "sev" ] && current_kernel_version="$(get_from_kata_deps "assets.kernel.${TEE}.version")"
 	fi
-	create_cache_asset "${binary}" "${current_cloud_hypervisor_version}"
-	echo "${current_cloud_hypervisor_version}"  > "latest"
+	create_cache_asset "${kernel_tarball_name}" "${current_kernel_version}" "${current_kernel_image}"
+}
+
+cache_firmware_artifacts() {
+	case ${FIRMWARE} in
+		"td-shim")
+			firmware_tarball_name="kata-static-cc-tdx-td-shim.tar.xz"
+			current_firmware_image="$(get_td_shim_image_name)"
+			current_firmware_version="$(get_from_kata_deps "externals.td-shim.version")-$(get_from_kata_deps "externals.td-shim.toolchain")"
+			;;
+		"tdvf")
+			firmware_tarball_name="kata-static-cc-tdx-tdvf.tar.xz"
+			current_firmware_image="$(get_ovmf_image_name)"
+			current_firmware_version="$(get_from_kata_deps "externals.ovmf.tdx.version")"
+			;;
+		*)
+			die "Not a valid firmware (td-shim, tdvf) wass set as the FIRMWARE environment variable."
+
+			;;
+	esac
+	create_cache_asset "${firmware_tarball_name}" "${current_firmware_version}" "${current_firmware_image}"
+}
+
+cache_virtiofsd_artifacts() {
+	local virtiofsd_tarball_name="kata-static-cc-virtiofsd.tar.xz"
+	local current_virtiofsd_version="$(get_from_kata_deps "externals.virtiofsd.version")-$(get_from_kata_deps "externals.virtiofsd.toolchain")"
+	local current_virtiofsd_image="$(get_virtiofsd_image_name)"
+	create_cache_asset "${virtiofsd_tarball_name}" "${current_virtiofsd_version}" "${current_virtiofsd_image}"
 }
 
 create_cache_asset() {
-	local component_name="$1"
-	local component_version="$2"
-	local verify_qemu=$(echo "${component_name}" | grep qemu || true)
-	local verify_clh=$(echo "${component_name}" | grep cloud || true)
+	local component_name="${1}"
+	local component_version="${2}"
+	local component_image="${3}"
 
-	if  [ ! -z "${verify_qemu}" ]; then
-		local qemu_cc_tarball_path=$(sudo find / -iname "${qemu_cc_tarball_name}")
-		info "qemu cc tarball_path ${qemu_cc_tarball_path}"
-		cp -a "${qemu_cc_tarball_path}" .
-	fi
-
+	sudo cp "${repo_root_dir}/tools/packaging/kata-deploy/local-build/build/${component_name}" .
 	sudo chown -R "${USER}:${USER}" .
 	sha256sum "${component_name}" > "sha256sum-${component_name}"
 	cat "sha256sum-${component_name}"
+	echo "${component_version}" > "latest"
+	cat "latest"
+	echo "${component_image}" > "latest_image"
+	cat "latest_image"
 }
 
 help() {
@@ -63,7 +96,19 @@ Usage: $0 "[options]"
 	Builds the cache of several kata components.
 	Options:
 		-c	Cloud hypervisor cache
+		-k	Kernel cache
+			* Can receive a TEE environnment variable value, valid values are:
+			  * tdx
+			  If no TEE environment is passed, the kernel is built without TEE support.
 		-q	Qemu cache
+			* Can receive a TEE environnment variable value, valid values are:
+			  * tdx
+			  If no TEE environment is passed, QEMU is built without TEE support.
+		-f	Firmware cache
+			* Requires FIRMWARE environment variable set, valid values are:
+			  * tdvf
+			  * td-shim
+		-v	Virtiofsd cache
 		-h	Shows help
 EOF
 )"
@@ -72,15 +117,27 @@ EOF
 main() {
 	local cloud_hypervisor_component="${cloud_hypervisor_component:-}"
 	local qemu_component="${qemu_component:-}"
+	local kernel_component="${kernel_component:-}"
+	local firmware_component="${firmware_component:-}"
+	local virtiofsd_component="${virtiofsd_component:-}"
 	local OPTIND
-	while getopts ":cqh:" opt
+	while getopts ":ckqfvh:" opt
 	do
 		case "$opt" in
 		c)
 			cloud_hypervisor_component="1"
 			;;
+		k)
+			kernel_component="1"
+			;;
 		q)
 			qemu_component="1"
+			;;
+		f)
+			firmware_component="1"
+			;;
+		v)
+			virtiofsd_component="1"
 			;;
 		h)
 			help
@@ -96,7 +153,10 @@ main() {
 	shift $((OPTIND-1))
 
 	[[ -z "${cloud_hypervisor_component}" ]] && \
+	[[ -z "${kernel_component}" ]] && \
 	[[ -z "${qemu_component}" ]] && \
+	[[ -z "${firmware_component}" ]] && \
+	[[ -z "${virtiofsd_component}" ]] && \
 		help && die "Must choose at least one option"
 
 	mkdir -p "${WORKSPACE}/artifacts"
@@ -104,7 +164,10 @@ main() {
 	echo "Artifacts:"
 
 	[ "${cloud_hypervisor_component}" == "1" ] && cache_clh_artifacts
+	[ "${kernel_component}" == "1" ] && cache_kernel_artifacts
 	[ "${qemu_component}" == "1" ] && cache_qemu_artifacts
+	[ "${firmware_component}" == "1" ] && cache_firmware_artifacts
+	[ "${virtiofsd_component}" == "1" ] && cache_virtiofsd_artifacts
 
 	ls -la "${WORKSPACE}/artifacts/"
 	popd

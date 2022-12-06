@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -168,6 +167,7 @@ func (nd *nydusd) args() ([]string, error) {
 		logLevel = "debug"
 	}
 	args := []string{
+		"virtiofs", "--hybrid-mode",
 		"--log-level", logLevel,
 		"--apisock", nd.apiSockPath,
 		"--sock", nd.sockPath,
@@ -398,7 +398,7 @@ func (c *NydusClient) CheckStatus() (DaemonInfo, error) {
 		return DaemonInfo{}, err
 	}
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return DaemonInfo{}, err
 	}
@@ -470,7 +470,7 @@ func (c *NydusClient) Umount(mountPoint string) error {
 }
 
 func handleMountError(r io.Reader) error {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
