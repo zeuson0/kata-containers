@@ -295,6 +295,11 @@ static AGENT_CMDS: &[AgentCmd] = &[
         st: ServiceType::Image,
         fp: agent_cmd_pull_image,
     },
+    AgentCmd {
+        name: "MetaContainer",
+        st:ServiceType::Image,
+        fp:agent_cmd_meta_container,
+    }
 ];
 
 static BUILTIN_CMDS: & [BuiltinCmd] = &[
@@ -1150,6 +1155,34 @@ fn agent_cmd_container_stats(
 
     info!(sl!(), "response received";
         "response" => format!("{:?}", reply));
+
+    Ok(())
+}
+
+fn agent_cmd_meta_container(
+    ctx: &Context,
+    _agent: &AgentServiceClient,
+    _health: &HealthClient,
+    client: &ImageClient,
+    options: &mut Options,
+    args: &str,
+) -> Result<()> {
+    let mut req: MetaContainerRequest = utils::make_request(args)?;
+    let ctx = clone_context(ctx);
+    run_if_auto_values!(ctx, || -> Result<()> {
+        let cid = utils::get_option("cid", options, args)?;
+
+        req.set_container_id(cid);
+        Ok(())
+    });
+
+    debug!(sl!(), "sending request"; "request" => format!("{:?}", req));
+    let reply = client
+    .meta_container(ctx, &req)
+    .map_err(|e| anyhow!("{:?}", e).context(ERR_API_FAILED))?;
+
+    info!(sl!(), "response received";
+    "response" => format!("{:?}", reply));
 
     Ok(())
 }

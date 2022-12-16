@@ -185,23 +185,23 @@ externals:
 
   attestation-agent:
     description: "Provide attested key unwrapping for image decryption"
-    url: "https://github.com/confidential-containers/attestation-agent"
+    url: "https://ghproxy.com/https://github.com/confidential-containers/attestation-agent"
     version: "v0.2.0"
 
   cni-plugins:
     description: "CNI network plugins"
-    url: "https://github.com/containernetworking/plugins"
+    url: "https://ghproxy.com/https://github.com/containernetworking/plugins"
     version: "v1.1.1"
 
   conmon:
     description: "An OCI container runtime monitor"
-    url: "https://github.com/containers/conmon"
+    url: "https://ghproxy.com/https://github.com/containers/conmon"
     version: "v2.0.5"
 
   crio:
     description: |
       OCI-based Kubernetes Container Runtime Interface implementation
-    url: "https://github.com/cri-o/cri-o"
+    url: "https://ghproxy.com/https://github.com/cri-o/cri-o"
     branch: "release-1.23"
 
   containerd:
@@ -209,14 +209,14 @@ externals:
       Containerd for Kubernetes Container Runtime Interface.
     # CCv0 is using our fork of containerd as the changes can't be merged yet
     url: "github.com/confidential-containers/containerd"
-    tarball_url: "https://github.com/containerd/containerd/releases/download"
+    tarball_url: "https://ghproxy.com/https://github.com/containerd/containerd/releases/download"
     version: "v1.6.8"
     # CCv0 needs to build a branch from our fork to install containerd
     branch: "CC-main"
 
   critools:
     description: "CLI tool for Container Runtime Interface (CRI)"
-    url: "https://github.com/kubernetes-sigs/cri-tools"
+    url: "https://ghproxy.com/https://github.com/kubernetes-sigs/cri-tools"
     version: "1.23.0"
 
   cryptsetup:
@@ -231,22 +231,22 @@ externals:
 
   lvm2:
     description: "LVM2 and device-mapper tools and libraries"
-    url: "https://github.com/lvmteam/lvm2"
+    url: "https://ghproxy.com/https://github.com/lvmteam/lvm2"
     version: "v2_03_16"
 
   kubernetes:
     description: "Kubernetes project container manager"
-    url: "https://github.com/kubernetes/kubernetes"
+    url: "https://ghproxy.com/https://github.com/kubernetes/kubernetes"
     # regexp formed to match 'd.tar.gz', deliberately to not match any alpha or
     # beta type releases
     uscan-url: >-
-      https://github.com/kubernetes/kubernetes/tags
+      https://ghproxy.com/https://github.com/kubernetes/kubernetes/tags
       .*/v?([\d\.]+)\.tar\.gz
     version: "1.23.1-00"
 
   libseccomp:
     description: "High level interface to Linux seccomp filter"
-    url: "https://github.com/seccomp/libseccomp"
+    url: "https://ghproxy.com/https://github.com/seccomp/libseccomp"
     version: "2.5.4"
 
   pause:
@@ -256,22 +256,22 @@ externals:
 
   runc:
     description: "OCI CLI reference runtime implementation"
-    url: "https://github.com/opencontainers/runc"
+    url: "https://ghproxy.com/https://github.com/opencontainers/runc"
     # Oddly, here we do want rc versions, as there appears to be little else
     # really for runc.
     uscan-url: >-
-      https://github.com/opencontainers/runc/tags
+      https://ghproxy.com/https://github.com/opencontainers/runc/tags
       .*/v?(\d\S+)\.tar\.gz
     version: "v1.1.0"
 
   skopeo:
     description: "Utility for container images and image repositories"
-    url: "https://github.com/containers/skopeo"
+    url: "https://ghproxy.com/https://github.com/containers/skopeo"
     branch: "release-1.4"
 
   umoci:
     description: "Utility for creating and manipulating container images"
-    url: "https://github.com/opencontainers/umoci"
+    url: "https://ghproxy.com/https://github.com/opencontainers/umoci"
     tag: "v0.4.7"
 
   nydus:

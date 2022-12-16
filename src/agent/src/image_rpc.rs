@@ -189,7 +189,6 @@ impl ImageService {
                 }
             }
         });
-        let config = AGENT_CONFIG.read().await;
         let mut config_file = fs::File::create(config_path)?;
         config_file.write_all(ocicrypt_config.to_string().as_bytes())?;
 
@@ -199,8 +198,6 @@ impl ImageService {
             .arg(AA_KEYPROVIDER_PORT)
             .arg("--getresource_sock")
             .arg(AA_GETRESOURCE_PORT)
-            .arg("--agent_address")
-            .arg(&config.server_addr)
             .spawn()?;
         Ok(())
     }
@@ -360,11 +357,12 @@ impl protocols::image_ttrpc_async::Image for ImageService {
             .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?
             .spec
             .as_ref()
-            .ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, ""))?
+            .ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, "Can't find spec"))?
             .annotations
             .get(&ANNO_K8S_IMAGE_NAME.to_string())
-            .ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, ""))?;
-
+            .ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, "Can't find ANNO_K8S_IMAGE_NAME"))?;
+        
+        info!(sl!(), "image_name {}", _image_name);
         let mut res = image::MetaContainerResponse::new();
         res.digest = "123456".to_string();
         Ok(res)
