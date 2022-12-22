@@ -296,9 +296,9 @@ static AGENT_CMDS: &[AgentCmd] = &[
         fp: agent_cmd_pull_image,
     },
     AgentCmd {
-        name: "MetaContainer",
+        name: "FetchEvidence",
         st:ServiceType::Image,
-        fp:agent_cmd_meta_container,
+        fp:agent_cmd_fetch_evidence,
     }
 ];
 
@@ -1159,7 +1159,7 @@ fn agent_cmd_container_stats(
     Ok(())
 }
 
-fn agent_cmd_meta_container(
+fn agent_cmd_fetch_evidence(
     ctx: &Context,
     _agent: &AgentServiceClient,
     _health: &HealthClient,
@@ -1167,7 +1167,7 @@ fn agent_cmd_meta_container(
     options: &mut Options,
     args: &str,
 ) -> Result<()> {
-    let mut req: MetaContainerRequest = utils::make_request(args)?;
+    let mut req: FetchEvidenceRequest = utils::make_request(args)?;
     let ctx = clone_context(ctx);
     run_if_auto_values!(ctx, || -> Result<()> {
         let cid = utils::get_option("cid", options, args)?;
@@ -1178,7 +1178,7 @@ fn agent_cmd_meta_container(
 
     debug!(sl!(), "sending request"; "request" => format!("{:?}", req));
     let reply = client
-    .meta_container(ctx, &req)
+    .fetch_evidence(ctx, &req)
     .map_err(|e| anyhow!("{:?}", e).context(ERR_API_FAILED))?;
 
     info!(sl!(), "response received";

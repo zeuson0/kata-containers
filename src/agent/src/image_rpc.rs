@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, ensure, Result};
 use async_trait::async_trait;
+use librats_rs::get_quote;
+use openssl::hash::{Hasher, MessageDigest};
 use protocols::image;
 use rustjail::container::BaseContainer;
 use tokio::sync::Mutex;
@@ -331,11 +333,11 @@ impl protocols::image_ttrpc_async::Image for ImageService {
         }
     }
 
-    async fn meta_container(
+    async fn fetch_evidence(
         &self,
         _ctx: &ttrpc::r#async::TtrpcContext,
-        req: image::MetaContainerRequest,
-    ) -> ttrpc::Result<image::MetaContainerResponse> {
+        req: image::FetchEvidenceRequest,
+    ) -> ttrpc::Result<image::FetchEvidenceResponse> {
         let sandbox = self.sandbox.clone();
         let mut s = sandbox.lock().await;
 
@@ -346,13 +348,9 @@ impl protocols::image_ttrpc_async::Image for ImageService {
             )
         })?;
 
-        let image_client = self.image_client.clone();
-        let i = image_client.lock().await;
-
-        let meta_store = i.meta_store.clone();
-        let _m = meta_store.lock().await;
-
-        let _image_name = ctr
+        // Get image digest
+        let image_client = self.image_client.lock().await;
+        let image_name = ctr
             .config()
             .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?
             .spec
@@ -362,9 +360,27 @@ impl protocols::image_ttrpc_async::Image for ImageService {
             .get(&ANNO_K8S_IMAGE_NAME.to_string())
             .ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, "Can't find ANNO_K8S_IMAGE_NAME"))?;
         
-        info!(sl!(), "image_name {}", _image_name);
-        let mut res = image::MetaContainerResponse::new();
-        res.digest = "123456".to_string();
+        let meta_store = image_client.meta_store.lock().await;
+        let (_,image_data) = meta_store.image_db.iter().find(|(_,value)|{
+            &value.reference == image_name
+        }).ok_or_else(|| ttrpc_error(ttrpc::Code::INTERNAL, "Can't find image digest"))?;
+
+        let digest = image_data.digest.clone().trim_start_matches("sha256:").to_owned();
+
+        // Get quote
+        let mut h = Hasher::new(MessageDigest::sha256())
+            .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?;
+        h.update(digest.as_bytes())
+            .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?;
+        h.update(req.get_nonce())
+            .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?;
+        let report_data = h.finish()
+            .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?;
+        let evidence = get_quote(&report_data).await
+            .map_err(|e| ttrpc_error(ttrpc::Code::INTERNAL, e))?;
+
+        let mut res = image::FetchEvidenceResponse::new();
+        res.evidence = evidence;
         Ok(res)
     }
 }
